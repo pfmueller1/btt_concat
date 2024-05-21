@@ -1,106 +1,62 @@
-import datetime
-import os.path
-from copy import copy
-
 import openpyxl
 import tkinter
 from tkinter import filedialog
-
-import pandas as pd
 from openpyxl.reader.excel import load_workbook
-
-'''
-######################
-        TODOS
-######################
-    - BTT Template muss angepasst werden
-        - Sverweise, Formeln als solche übernehmen, NICHT die Werte in den Zellen
-        - erst die Sheets mit den Wertehilfen konsolidieren
-        - dann die BTT mit Werten füllen, auch hier die Formeln/Sverweise mit übernehmen 
-
-'''
 
 root = tkinter.Tk()
 root.withdraw()
-file_paths = filedialog.askopenfilenames(filetypes=[("Excel files", "*.xlsx *.xls")])
 
 #wb = load_workbook('BTT_Template.xlsx')
 wb = load_workbook(filedialog.askopenfilename(filetypes=[("Excel files", '*.xlsx *.xls')]))
 
+file_paths = filedialog.askopenfilenames(filetypes=[("Excel files", "*.xlsx *.xls")])
 
-def equal_ws(ws1, ws2, sheet_name):
-    idx = []
-    if ws1.max_row != ws2.max_row or ws1.max_column != ws2.max_column:
-        return False
+all_tab_data = {}
 
-    if sheet_name == 'Übersicht':
-        idx = [0, 4, 5]  # es fehlen die Spalten B, G, H
-    elif sheet_name == 'BPML':
-        idx = [0, 1, 2, 5, 6, 7]  # es fehlen die Spalten D, I, J
-    elif sheet_name == 'Transaktionen':
-        idx = [0, 1, 2, 3, 4, 6]  # es fehlen die Spalten F
-    elif sheet_name == 'Formulare':
-        idx = [0, 1]  # es fehlt Spalte C
-    elif sheet_name == 'Schnittstellen':
-        idx = [7, 8]  # es fehlt Spalte J -> was ist mit A:G????
-    elif sheet_name == 'Datengrundlage adesso':  # TODO: immer gleich?
-        idx = [0, 1, 4, 6, 8, 10]  # es fehlt die Spalte C
 
-    for row1, row2 in zip(ws1.iter_rows(values_only=True), ws2.iter_rows(values_only=True)):
-        for i in idx:
-            cell1, cell2 = row1[i], row2[i]
-            if cell1 != cell2:
-                return False
-    return True
+def copy_range(start_col, start_row, end_col, end_row, sheet):
+    range_sel = []
+    for i in range(start_row, end_row + 1, 1):
+        row_sel = []
+        for j in range(start_col, end_col + 1, 1):
+            row_sel.append(sheet.cell(row=i, column=j).value)
+        range_sel.append(row_sel)
+    return range_sel
+
+
+def paste_range(start_col, start_row, end_col, end_row, sheet_receiving, copied_data):
+    count_row = 0
+    for i in range(start_row, end_row + 1, 1):
+        count_col = 0
+        for j in range(start_col, end_col + 1, 1):
+            try:
+                sheet_receiving.cell(row=i, column=j).value = copied_data[count_row][count_col]
+            except Exception as e:
+                sheet_receiving.cell(row=i, column=j).value = None
+            count_col += 1
+        count_row += 1
 
 
 for path in file_paths:
     wb_tmp = load_workbook(path)
-    try:
-        for sheet in wb.sheetnames:
-            try:
-                ws_tmp = wb_tmp[sheet]
+    tab_data = {}
 
-                if sheet == 'BTT':
-                    # TODO sind A2:_ ; B2:_ ; C2:_ identisch?
-                    if not equal_ws(ws_tmp, wb[sheet], sheet):  # TODO: ganzes sheet wird noch überprüft
-                        for row in ws_tmp:
-                            wb[sheet].append(row)
-                        #wb[sheet].append(ws_tmp)
-                        print("sheets", sheet, "not equal")
-                elif sheet == 'BPML':
-                    # TODO sind A2:_ ; B2:_ ; C2:_ identisch?
-                    if not equal_ws(ws_tmp, wb[sheet], sheet):  # TODO: ganzes sheet wird noch überprüft
-                        for row in ws_tmp:
-                            wb[sheet].append(row)
-                        #wb[sheet].append(ws_tmp)
-                        print("sheets", sheet, "not equal")
-                elif sheet == 'Transaktionen':
-                    # TODO sind A2:_ ; B2:_ ; C2:_ ; E2:_ identisch?
-                    # sind D2:_ identisch? wenn nein, dann das größere nehmen?
-                    if not equal_ws(ws_tmp, wb[sheet], sheet):
-                        for row in ws_tmp:
-                            wb[sheet].append(row)
-                        #wb[sheet].append(ws_tmp)
-                        print("sheets", sheet, "not equal")
-                elif sheet == 'Formulare':
-                    # TODO sind A2:_ ; B2:_ identisch?
-                    if not equal_ws(ws_tmp, wb[sheet], sheet):
-                        for row in ws_tmp:
-                            wb[sheet].append(row)
-                        #wb[sheet].append(ws_tmp)
-                        print("sheets", sheet, "not equal")
-                elif sheet == 'Schnittstellen':
-                    # TODO sind H,I,J2 gleich; was ist mit A:F??
-                    if not equal_ws(ws_tmp, wb[sheet], sheet):
-                        for row in ws_tmp:
-                            wb[sheet].append(row)
-                        #wb[sheet].append(ws_tmp)
-                        print("sheets", sheet, "not equal")
+    for sheet in wb_tmp:    # TODO: was ist mit sheets, die voneinander getrennte Tabellen haben?
+        if sheet != 'Übersicht' and sheet != 'das andere halt':
+            tab_data[sheet] = {
+                "start_col": sheet.min_column,
+                "start_row": sheet.min_row,
+                "end_col": sheet.max_column,
+                "end_row": sheet.max_row
+            }
+    all_tab_data[path] = tab_data
 
-            except Exception as e:
-                print("Fehler beim Lesen der Mappe", sheet, "in Datei", path, ":", str(e))
-    except Exception as e:
-        print("Fehler beim Lesen der Datei", path, ":", str(e))
+for file, data in all_tab_data.items():
+    wb_tmp = load_workbook(file)
+    for sheet, dim in data.items():
+        sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_col"], sheet)
+        paste_range(wb[sheet].min_column, dim["start_row"] + wb[sheet].max_row, wb[sheet].max_column, # TODO: wie Dimensionen des Templates behandeln?
+                    dim["end_row"] + wb[sheet].max_row, wb[sheet], sel_range)
 
+# ws.delete_rows(2)     TODO: index rutscht nach!
 wb.save('output.xlsx')
