@@ -2,7 +2,7 @@ import openpyxl
 import tkinter
 from tkinter import filedialog
 from openpyxl.reader.excel import load_workbook
-from openpyxl.utils import column_index_from_string
+from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 root = tkinter.Tk()
@@ -61,6 +61,25 @@ def adj_table_dim(sheet, table_name):
     end_row = get_max_row(sheet, column_index_from_string(start_col), column_index_from_string(end_col))
     new_ref = f"{start_col}{start_row}:{end_col}{end_row}"
     table.ref = new_ref
+
+
+def add_dv(sheet):
+    max_row = sheet.max_row
+
+    for tab_name, cols in dv_lists.items():
+        for col in cols:
+            col_letter = col if col.isalpha() else get_column_letter(col)
+            dv = DataValidation(
+                type="list",
+                formula1=f"{tab_name}",
+                allow_blank=True,
+                showDropDown=False,
+                showInputMessage=True,
+                showErrorMessage=True
+            )
+            range_str = f"${col_letter}$3:${col_letter}${max_row}"
+            dv.add(range_str)
+            sheet.add_data_validation(dv)
 
 
 for path in file_paths:
@@ -145,38 +164,43 @@ for file, data in all_tab_data.items():
             adj_table_dim(wb[sheet_name], "Outputs")
             adj_table_dim(wb[sheet_name], "Interfaces")
 
-
 # distribute drop down lists
-dropdowns = {
-    'B': "Hauptprozess",
-    'C': "Subprozess",
-    'F': "Teilprojekt_Kürzel",
-    'H': "Modul",
-    'I': "Transaktionen",
-    'O': "Vorhanden",
-    'R': "Schnittstelle",
-    'T': "Output",
-    'U': "Formular",
-    'X': "Vorhanden",
-    'Z': "Priorität",
-    'AA': "Vorhanden",
+dv_lists = {
+    f'BPML!$A$2:$A${get_max_row(wb["BPML"], column_index_from_string("A"), column_index_from_string("A"))}': {'B'},
+    f'=BPML!$F$2:$F${get_max_row(wb["BPML"], column_index_from_string("F"), column_index_from_string("F"))}': {'C'},
+    f'=Transaktionen!$A$2:$A${get_max_row(wb["Transaktionen"], column_index_from_string("A"), column_index_from_string("A"))}': {
+        'I'},
+    f'=Schnittstellen!$H$2:$H${get_max_row(wb["Schnittstellen"], column_index_from_string("H"), column_index_from_string("H"))}': {
+        'R'},
+    f'=\'Datengrundlage adesso\'!$A$2:$A${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("A"), column_index_from_string("A"))}': {
+        'H'},
+    f'=\'Datengrundlage adesso\'!$E$2:$E${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("E"), column_index_from_string("E"))}': {
+        'Z'},
+    f'=\'Datengrundlage adesso\'!$G$2:$G${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("G"), column_index_from_string("G"))}': {
+        'X', 'AA', 'AB', 'O', 'AG', 'AH', 'AI', 'AJ'},
+    f'=\'Datengrundlage adesso\'!$I$2:$I${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("I"), column_index_from_string("I"))}': {
+        'T'},
+    f'=Formulare!$A$2:$A${get_max_row(wb["Formulare"], column_index_from_string("A"), column_index_from_string("A"))}': {
+        'U'},
+    f'=\'Datengrundlage adesso\'!$K$2:$K${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("K"), column_index_from_string("K"))}': {
+        'AD'},
+    f'=Übersicht!$F$2:$F${get_max_row(wb["Übersicht"], column_index_from_string("F"), column_index_from_string("F"))}': {
+        'F'}
 }
 
 
 # TODO:
-#   - the DataValidation Objects must be modified and can neither be overwritten nor deleted, so these bad boys must get
-#     a new MultiCellRange - max value
-#   - then the formula1 parameter must be checked and if this doesnt work, it needs to be replaced with the new values
-#   - further the Style of the cells must be expanded to the last row
+#   - the datavalidation objects must be modified and can neither be overwritten nor deleted, so these bad boys must get            # DONE
+#     a new multicellrange - max value                                                                                              # DONE
+#   - then the formula1 parameter must be checked and if this doesnt work, it needs to be replaced with the new values              # DONE
+#   - further the Style of the cells must be expanded to the last row -> formatting rules?
 #   - then the program should work fine for one BTT file, if there are more files at once, what happens with duplicates?
 #   - also what should be done if there already is an existing consolidated file?
 #   - and should the final concatenated file contain columns for the date and the source BTT file?
-
-def rem_dv(sheet, col):
-    for dv in sheet.data_validations.dataValidation:
-        print(dv)
+#   - there also seems to be a problem with the new file when opening
 
 
-rem_dv(wb["BTT"], "B")
-
+# this actually works and clears the dataValidations
+wb["BTT"].data_validations = openpyxl.worksheet.datavalidation.DataValidationList()
+add_dv(wb["BTT"])
 wb.save('output.xlsx')
