@@ -1,9 +1,13 @@
 import openpyxl
 import tkinter
 from tkinter import filedialog
+
 from openpyxl.reader.excel import load_workbook
+from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.styles import PatternFill, Color
+from openpyxl.formatting.rule import Rule, FormulaRule, ColorScaleRule, ColorScale
 
 
 def get_max_row(sheet, start_col, end_col):
@@ -56,12 +60,12 @@ def adj_table_dim(sheet, table_name):
 def add_dv(sheet, dv_list):
     max_row = sheet.max_row
 
-    for tab_name, cols in dv_list.items():
+    for formula, cols in dv_list.items():
         for col in cols:
             col_letter = col if col.isalpha() else get_column_letter(col)
             dv = DataValidation(
                 type="list",
-                formula1=f"{tab_name}",
+                formula1=f"{formula}",
                 allow_blank=True,
                 showDropDown=False,
                 showInputMessage=True,
@@ -70,6 +74,27 @@ def add_dv(sheet, dv_list):
             range_str = f"${col_letter}$3:${col_letter}${max_row}"
             dv.add(range_str)
             sheet.add_data_validation(dv)
+
+
+# TODO: should work but somehow does not apply the rule -> english formulas???????????
+def add_cf(sheet, cf_list):
+    red_fill = PatternFill(patternType=None,
+                           fgColor=Color(rgb="000000",
+                                         type="rgb"),
+                           bgColor=Color(rgb="FFA7A7",
+                                         type="rgb")
+                           )
+
+    dxf = DifferentialStyle(fill=red_fill)
+
+    for formula, cols in cf_list.items():
+        for col in cols:
+            col_letter = col if col.isalpha() else get_column_letter(col)
+            sheet.conditional_formatting.add(f"{col_letter}3:{col_letter}{sheet.max_row}",
+                                             Rule(type="expression",
+                                                  dxf=dxf,
+                                                  formula=[f"{formula}"])
+                                             )
 
 
 def main():
@@ -151,6 +176,8 @@ def main():
             # expand table dimensions in template file
             if sheet_name == "Übersicht":
                 adj_table_dim(wb[sheet_name], "Teilprojekte")
+            #elif sheet_name == "BTT":  # TODO: muss für style noch angepasst werden
+                #adj_table_dim(wb[sheet_name], "BTT")
             elif sheet_name == "BPML":
                 adj_table_dim(wb[sheet_name], "Hauptprozesse")
                 adj_table_dim(wb[sheet_name], "BPML")
@@ -171,24 +198,27 @@ def main():
     dv_list = {
         f'BPML!$A$2:$A${get_max_row(wb["BPML"], column_index_from_string("A"), column_index_from_string("A"))}': {'B'},
         f'=BPML!$F$2:$F${get_max_row(wb["BPML"], column_index_from_string("F"), column_index_from_string("F"))}': {'C'},
-        f'=Transaktionen!$A$2:$A${get_max_row(wb["Transaktionen"], column_index_from_string("A"), column_index_from_string("A"))}': {
-            'I'},
-        f'=Schnittstellen!$H$2:$H${get_max_row(wb["Schnittstellen"], column_index_from_string("H"), column_index_from_string("H"))}': {
-            'R'},
-        f'=\'Datengrundlage adesso\'!$A$2:$A${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("A"), column_index_from_string("A"))}': {
-            'H'},
-        f'=\'Datengrundlage adesso\'!$E$2:$E${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("E"), column_index_from_string("E"))}': {
-            'Z'},
-        f'=\'Datengrundlage adesso\'!$G$2:$G${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("G"), column_index_from_string("G"))}': {
-            'X', 'AA', 'AB', 'O', 'AG', 'AH', 'AI', 'AJ'},
-        f'=\'Datengrundlage adesso\'!$I$2:$I${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("I"), column_index_from_string("I"))}': {
-            'T'},
-        f'=Formulare!$A$2:$A${get_max_row(wb["Formulare"], column_index_from_string("A"), column_index_from_string("A"))}': {
-            'U'},
-        f'=\'Datengrundlage adesso\'!$K$2:$K${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("K"), column_index_from_string("K"))}': {
-            'AD'},
-        f'=Übersicht!$F$2:$F${get_max_row(wb["Übersicht"], column_index_from_string("F"), column_index_from_string("F"))}': {
-            'F'}
+        f'=Transaktionen!$A$2:$A${get_max_row(wb["Transaktionen"], column_index_from_string("A"), column_index_from_string("A"))}': {'I'},
+        f'=Schnittstellen!$H$2:$H${get_max_row(wb["Schnittstellen"], column_index_from_string("H"), column_index_from_string("H"))}': {'R'},
+        f'=\'Datengrundlage adesso\'!$A$2:$A${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("A"), column_index_from_string("A"))}': {'H'},
+        f'=\'Datengrundlage adesso\'!$E$2:$E${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("E"), column_index_from_string("E"))}': {'Z'},
+        f'=\'Datengrundlage adesso\'!$G$2:$G${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("G"), column_index_from_string("G"))}': {'X', 'AA', 'AB', 'O', 'AG', 'AH', 'AI', 'AJ'},
+        f'=\'Datengrundlage adesso\'!$I$2:$I${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("I"), column_index_from_string("I"))}': {'T'},
+        f'=Formulare!$A$2:$A${get_max_row(wb["Formulare"], column_index_from_string("A"), column_index_from_string("A"))}': {'U'},
+        f'=\'Datengrundlage adesso\'!$K$2:$K${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("K"), column_index_from_string("K"))}': {'AD'},
+        f'=Übersicht!$F$2:$F${get_max_row(wb["Übersicht"], column_index_from_string("F"), column_index_from_string("F"))}': {'F'}
+    }
+
+    demo_cf_list = {
+        "ISBLANK(O3)": {'O'}
+    }
+
+    # distribute conditional formatting
+    cf_list = {
+        "ISBLANK(B3)": {'B'},
+        #"UND(ISTLEER(W3);ODER(T3=\"Mail\";T3=\"XML\";T3=\"weiterer\"))": {'W'},
+        #"UND(ISTLEER(U3);T3=\"SAP-Formular\")": {'U', 'V'},
+        #"ISTLEER(D3)": {'H', 'I', 'D', 'O', 'T', 'X', 'Z'}
     }
 
     # TODO:
@@ -201,9 +231,16 @@ def main():
     #   - and should the final concatenated file contain columns for the date and the source BTT file?
     #   - there also seems to be a problem with the new file when opening
 
-    # this actually works and clears the dataValidations
+    # modify data validations
     wb["BTT"].data_validations = openpyxl.worksheet.datavalidation.DataValidationList()
     add_dv(wb["BTT"], dv_list)
+
+    # modify conditional formatting
+    # clear the conditional formatting
+    #wb.conditional_formatting = openpyxl.formatting.formatting.ConditionalFormattingList()
+
+    add_cf(wb["BTT"], cf_list)
+
     wb.save('output.xlsx')
 
 
