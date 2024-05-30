@@ -1,13 +1,14 @@
-import openpyxl
 import tkinter
 from tkinter import filedialog
 
+from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import column_index_from_string, get_column_letter
-from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.cell_range import CellRange
+from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
 from openpyxl.styles import PatternFill, Color
-from openpyxl.formatting.rule import Rule, FormulaRule, ColorScaleRule, ColorScale
+from openpyxl.formatting.rule import Rule
 
 
 def get_max_row(sheet, start_col, end_col):
@@ -47,16 +48,6 @@ def paste_range(start_col, start_row, end_col, end_row, sheet_receiving, copied_
         count_row += 1
 
 
-def adj_table_dim(sheet, table_name):
-    table = sheet.tables[table_name]
-    ref = table.ref
-    start_col, start_row = ref.split(':')[0][0], ref.split(':')[0][1:]
-    end_col = ref.split(':')[1][0]
-    end_row = get_max_row(sheet, column_index_from_string(start_col), column_index_from_string(end_col))
-    new_ref = f"{start_col}{start_row}:{end_col}{end_row}"
-    table.ref = new_ref
-
-
 def add_dv(sheet, dv_list):
     max_row = sheet.max_row
 
@@ -76,7 +67,6 @@ def add_dv(sheet, dv_list):
             sheet.add_data_validation(dv)
 
 
-# TODO: should work but somehow does not apply the rule -> english formulas???????????
 def add_cf(sheet, cf_list):
     red_fill = PatternFill(patternType=None,
                            fgColor=Color(rgb="000000",
@@ -93,7 +83,7 @@ def add_cf(sheet, cf_list):
             sheet.conditional_formatting.add(f"{col_letter}3:{col_letter}{sheet.max_row}",
                                              Rule(type="expression",
                                                   dxf=dxf,
-                                                  formula=[f"{formula}"])
+                                                  formula=[f"{formula.replace('~', col_letter)}"])
                                              )
 
 
@@ -175,24 +165,25 @@ def main():
 
             # expand table dimensions in template file
             if sheet_name == "Übersicht":
-                adj_table_dim(wb[sheet_name], "Teilprojekte")
-            #elif sheet_name == "BTT":  # TODO: muss für style noch angepasst werden
-                #adj_table_dim(wb[sheet_name], "BTT")
+                wb[sheet_name].tables["Teilprojekte"].ref = f"$E$1:$H${get_max_row(wb[sheet_name], 5, 8)}"
+            elif sheet_name == "BTT":
+                wb[sheet_name].tables["BTT"].ref = f"$A$2:$AT${wb[sheet_name].max_row}"
             elif sheet_name == "BPML":
-                adj_table_dim(wb[sheet_name], "Hauptprozesse")
-                adj_table_dim(wb[sheet_name], "BPML")
+                wb[sheet_name].tables["Hauptprozesse"].ref = f"$A$1:$D${get_max_row(wb[sheet_name], 1, 4)}"
+                wb[sheet_name].tables["BPML"].ref = f"$F$1:$J${get_max_row(wb[sheet_name], 6, 10)}"
             elif sheet_name == "Transaktionen":
-                adj_table_dim(wb[sheet_name], "Transaktionen")
+                wb[sheet_name].tables["Transaktionen"].ref = f"$A$1:$G${get_max_row(wb[sheet_name], 1, 7)}"
             elif sheet_name == "Formulare":
-                adj_table_dim(wb[sheet_name], "Formulare")
+                wb[sheet_name].tables["Formulare"].ref = f"$A$1:$C${get_max_row(wb[sheet_name], 1, 3)}"
             elif sheet_name == "Schnittstellen":
-                adj_table_dim(wb[sheet_name], "Schnittstelle_Klarname")
+                wb[sheet_name].tables["Schnittstelle_Klarname"].ref = f"$H$1:$J${get_max_row(wb[sheet_name], 8, 10)}"
             elif sheet_name == "Datengrundlage adesso":
-                adj_table_dim(wb[sheet_name], "Module")
-                adj_table_dim(wb[sheet_name], "Prioritäten")
-                adj_table_dim(wb[sheet_name], "Vorhanden?")
-                adj_table_dim(wb[sheet_name], "Outputs")
-                adj_table_dim(wb[sheet_name], "Interfaces")
+                wb[sheet_name].tables["Module"].ref = f"$A$1:$C${get_max_row(wb[sheet_name], 1, 3)}"
+                wb[sheet_name].tables["Prioritäten"].ref = f"$E$1:$E${get_max_row(wb[sheet_name], 5, 5)}"
+                wb[sheet_name].tables["Vorhanden?"].ref = f"$G$1:$G${get_max_row(wb[sheet_name], 7, 7)}"
+                wb[sheet_name].tables["Outputs"].ref = f"$I$1:$I${get_max_row(wb[sheet_name], 9, 9)}"
+                wb[sheet_name].tables["Interfaces"].ref = f"$K$1:$K${get_max_row(wb[sheet_name], 11, 11)}"
+
 
     # distribute drop down lists
     dv_list = {
@@ -209,39 +200,36 @@ def main():
         f'=Übersicht!$F$2:$F${get_max_row(wb["Übersicht"], column_index_from_string("F"), column_index_from_string("F"))}': {'F'}
     }
 
-    demo_cf_list = {
-        "ISBLANK(O3)": {'O'}
-    }
 
     # distribute conditional formatting
     cf_list = {
-        "ISBLANK(B3)": {'B'},
-        #"UND(ISTLEER(W3);ODER(T3=\"Mail\";T3=\"XML\";T3=\"weiterer\"))": {'W'},
-        #"UND(ISTLEER(U3);T3=\"SAP-Formular\")": {'U', 'V'},
-        #"ISTLEER(D3)": {'H', 'I', 'D', 'O', 'T', 'X', 'Z'}
+        f"ISBLANK(B3)": {'B'},
+        f'AND(ISBLANK(W3),OR(T3="Mail",T3="XML",T3="weiterer"))': {'W'},
+        f'AND(ISBLANK(U3),T3="SAP-Formular")': {'U', 'V'},
+        f'ISBLANK(~3)': {'H', 'I', 'D', 'O', 'T', 'X', 'Z'}
     }
 
     # TODO:
     #   - the datavalidation objects must be modified and can neither be overwritten nor deleted, so these bad boys must get            # DONE
     #     a new multicellrange - max value                                                                                              # DONE
     #   - then the formula1 parameter must be checked and if this doesnt work, it needs to be replaced with the new values              # DONE
-    #   - further the Style of the cells must be expanded to the last row -> formatting rules?
+    #   - further the Style of the cells must be expanded to the last row -> formatting rules?                                          # DONE
     #   - then the program should work fine for one BTT file, if there are more files at once, what happens with duplicates?
     #   - also what should be done if there already is an existing consolidated file?
     #   - and should the final concatenated file contain columns for the date and the source BTT file?
     #   - there also seems to be a problem with the new file when opening
+    #   - column AL? - aktivesTeilprojekt??
 
     # modify data validations
-    wb["BTT"].data_validations = openpyxl.worksheet.datavalidation.DataValidationList()
+    wb["BTT"].data_validations = DataValidationList()
     add_dv(wb["BTT"], dv_list)
 
     # modify conditional formatting
-    # clear the conditional formatting
-    #wb.conditional_formatting = openpyxl.formatting.formatting.ConditionalFormattingList()
-
+    wb.conditional_formatting = ConditionalFormattingList()
     add_cf(wb["BTT"], cf_list)
 
     wb.save('output.xlsx')
+    wb.close()
 
 
 if __name__ == "__main__":
