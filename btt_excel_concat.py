@@ -1,14 +1,13 @@
 import tkinter
 from tkinter import filedialog
-
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import column_index_from_string, get_column_letter
-from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
 from openpyxl.styles import PatternFill, Color
 from openpyxl.formatting.rule import Rule
+import xxhash
 
 
 def get_max_row(sheet, start_col, end_col):
@@ -85,6 +84,30 @@ def add_cf(sheet, cf_list):
                                                   dxf=dxf,
                                                   formula=[f"{formula.replace('~', col_letter)}"])
                                              )
+
+
+def hash_row(row):
+    row_str = ''.join([str(cell) for cell in row])
+    return xxhash.xxh64(row_str).hexdigest()
+
+
+def del_dupes(sheet, columns=None):
+    seen_hashes = set()
+    del_list = []
+
+    for row_idx, row in enumerate(sheet.iter_rows(min_row=3, max_row=sheet.max_row, values_only=True), start=3):
+        if columns:
+            row_values = [row[col - 1] for col in columns]
+        else:
+            row_values = row
+        row_hash = hash_row(row_values)
+        if row_hash in seen_hashes:
+            del_list.append(row_idx)
+        else:
+            seen_hashes.add(row_hash)
+
+    for row_idx in reversed(del_list):
+        sheet.delete_rows(row_idx)
 
 
 def main():
@@ -184,7 +207,6 @@ def main():
                 wb[sheet_name].tables["Outputs"].ref = f"$I$1:$I${get_max_row(wb[sheet_name], 9, 9)}"
                 wb[sheet_name].tables["Interfaces"].ref = f"$K$1:$K${get_max_row(wb[sheet_name], 11, 11)}"
 
-
     # distribute drop down lists
     dv_list = {
         f'BPML!$A$2:$A${get_max_row(wb["BPML"], column_index_from_string("A"), column_index_from_string("A"))}': {'B'},
@@ -199,7 +221,6 @@ def main():
         f'=\'Datengrundlage adesso\'!$K$2:$K${get_max_row(wb["Datengrundlage adesso"], column_index_from_string("K"), column_index_from_string("K"))}': {'AD'},
         f'=Übersicht!$F$2:$F${get_max_row(wb["Übersicht"], column_index_from_string("F"), column_index_from_string("F"))}': {'F'}
     }
-
 
     # distribute conditional formatting
     cf_list = {
@@ -219,6 +240,11 @@ def main():
     #   - and should the final concatenated file contain columns for the date and the source BTT file?
     #   - there also seems to be a problem with the new file when opening
     #   - column AL? - aktivesTeilprojekt??
+
+
+
+    del_dupes(wb["Übersicht"], columns=[5, 6, 7, 8])    # TODO -> muss angepasst werden, sonst werden die Tabellen schon erweitert
+    del_dupes(wb["Übersicht"], columns=[1, 2])          #   - außerdem schöner machen, nicht alles hardcoden
 
     # modify data validations
     wb["BTT"].data_validations = DataValidationList()
