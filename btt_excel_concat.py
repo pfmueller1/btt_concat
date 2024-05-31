@@ -72,6 +72,7 @@ def paste_range(start_col, start_row, end_col, end_row, sheet_receiving, copied_
             count_col += 1
         count_row += 1
     del_dupes(sheet_receiving, columns=range(start_col, end_col + 1))
+    print(sheet_receiving)
 
 
 def add_dv(sheet, dv_list):
@@ -218,18 +219,13 @@ def main():
                     paste_range(d["start_col"], get_max_row(wb[sheet_name], d["start_col"], d["end_col"]) + 1,
                                 d["end_col"],
                                 wb[sheet_name].max_row + d["end_row"], wb[sheet_name], sel_range)
-                    # TODO - delete dupes here  -> the current ranges are the ranges of the tmp_wb, not the final wb??  -> call this function in paste_..()?
-                    #del_dupes(wb[sheet_name], columns=range(d["start_col"], d["end_col"]+1))
-
             else:
-                sel_range = copy_range(dim["start_col"] + 1, dim["start_row"] + 1, dim["end_col"], dim["end_row"],  # TODO: start_col + 1??
+                sel_range = copy_range(dim["start_col"] + 1, dim["start_row"] + 1, dim["end_col"], dim["end_row"],
                                        wb_tmp[sheet_name])
                 paste_range(wb[sheet_name].min_column,
                             get_max_row(wb[sheet_name], dim["start_col"], dim["end_col"]) + 1,
                             wb[sheet_name].max_column,
                             wb[sheet_name].max_row + dim["end_row"], wb[sheet_name], sel_range)
-                # TODO - delete dupes here
-                #del_dupes(wb[sheet_name], columns=range(dim["start_col"], dim["end_col"]+1))
 
             # expand table dimensions in template file
             if sheet_name == "Übersicht":
@@ -281,11 +277,12 @@ def main():
     #     a new multicellrange - max value                                                                                              # DONE
     #   - then the formula1 parameter must be checked and if this doesnt work, it needs to be replaced with the new values              # DONE
     #   - further the Style of the cells must be expanded to the last row -> formatting rules?                                          # DONE
-    #   - then the program should work fine for one BTT file, if there are more files at once, what happens with duplicates?
-    #   - also what should be done if there already is an existing consolidated file?
+    #   - then the program should work fine for one BTT file, if there are more files at once, what happens with duplicates?            # DONE
+    #   - also what should be done if there already is an existing consolidated file?   -> overwritten                                  # DONE
     #   - and should the final concatenated file contain columns for the date and the source BTT file?
-    #   - there also seems to be a problem with the new file when opening
+    #   - there also seems to be a problem with the new file when opening                                                               # DONE
     #   - column AL? - aktivesTeilprojekt??
+    #   - optimize performance!
 
     #del_dupes(wb["Datengrundlage adesso"], columns=[1, 2, 3])
 
