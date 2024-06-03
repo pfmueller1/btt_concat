@@ -1,13 +1,15 @@
 import tkinter
+import time
 from tkinter import filedialog
+
+import xxhash
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles.differential import DifferentialStyle
-from openpyxl.utils import column_index_from_string, get_column_letter
+from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
 from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
 from openpyxl.styles import PatternFill, Color
 from openpyxl.formatting.rule import Rule
-import xxhash
 
 
 def get_max_row(sheet, start_col, end_col):
@@ -68,6 +70,35 @@ def add_cf(sheet, cf_list):
 def hash_row(row):
     row_str = ''.join([str(cell) for cell in row])
     return xxhash.xxh64(row_str).hexdigest()
+
+
+def clean_table(sheet, table_name):
+    if table_name in sheet.tables:
+        table = sheet.tables[table_name]
+        min_col, min_row, max_col, max_row = range_boundaries(table.ref)
+
+        # Create a list to store non-empty rows
+        non_empty_rows = []
+
+        for row in range(min_row, max_row + 1):
+            if not all(sheet.cell(row=row, column=col).value is None for col in range(min_col, max_col + 1)):
+                non_empty_rows.append(row)
+
+        # Move non-empty rows up to fill empty rows
+        for i, row in enumerate(non_empty_rows, start=min_row):
+            for col in range(min_col, max_col + 1):
+                sheet.cell(row=i, column=col).value = sheet.cell(row=row, column=col).value
+                if i != row:
+                    sheet.cell(row=row, column=col).value = None
+
+        update_table_dimensions(sheet, table_name, min_col, max_col)
+
+
+def update_table_dimensions(sheet, table_name, start_col, end_col):
+    if table_name in sheet.tables:
+        table = sheet.tables[table_name]
+        start_row = 1 if table_name != "BTT" else 2
+        table.ref = f"{get_column_letter(start_col)}{start_row}:{get_column_letter(end_col)}{get_max_row(sheet, start_col, end_col)}"
 
 
 def main():
@@ -151,27 +182,10 @@ def main():
                         seen_hashes.setdefault(sheet_name, set()).add(row_hash)
                         paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
 
-            # expand table dimensions in template file
-            if sheet_name == "Übersicht":
-                wb[sheet_name].tables["Teilprojekte"].ref = f"$E$1:$H${get_max_row(wb[sheet_name], 5, 8)}"
-            elif sheet_name == "BTT":
-                wb[sheet_name].tables["BTT"].ref = f"$A$2:$AT${wb[sheet_name].max_row}"
-            elif sheet_name == "BPML":
-                wb[sheet_name].tables["Hauptprozesse"].ref = f"$A$1:$D${get_max_row(wb[sheet_name], 1, 4)}"
-                wb[sheet_name].tables["BPML"].ref = f"$F$1:$J${get_max_row(wb[sheet_name], 6, 10)}"
-            elif sheet_name == "Transaktionen":
-                wb[sheet_name].tables["Transaktionen"].ref = f"$A$1:$G${get_max_row(wb[sheet_name], 1, 7)}"
-            elif sheet_name == "Formulare":
-                wb[sheet_name].tables["Formulare"].ref = f"$A$1:$C${get_max_row(wb[sheet_name], 1, 3)}"
-            elif sheet_name == "Schnittstellen":
-                wb[sheet_name].tables["Schnittstelle_Klarname"].ref = f"$H$1:$J${get_max_row(wb[sheet_name], 8, 10)}"
-                wb[sheet_name].tables["Schnittstellen_technisch"].ref = f"$A$1:$F${get_max_row(wb[sheet_name], 1, 6)}"
-            elif sheet_name == "Datengrundlage adesso":
-                wb[sheet_name].tables["Module"].ref = f"$A$1:$C${get_max_row(wb[sheet_name], 1, 3)}"
-                wb[sheet_name].tables["Prioritäten"].ref = f"$E$1:$E${get_max_row(wb[sheet_name], 5, 5)}"
-                wb[sheet_name].tables["Vorhanden?"].ref = f"$G$1:$G${get_max_row(wb[sheet_name], 7, 7)}"
-                wb[sheet_name].tables["Outputs"].ref = f"$I$1:$I${get_max_row(wb[sheet_name], 9, 9)}"
-                wb[sheet_name].tables["Interfaces"].ref = f"$K$1:$K${get_max_row(wb[sheet_name], 11, 11)}"
+            for tab_name in wb[sheet_name].tables:
+                clean_table(wb[sheet_name], tab_name)
+                min_col, min_row, max_col, max_row = range_boundaries(wb[sheet_name].tables[tab_name].ref)
+    #                update_table_dimensions(wb[sheet_name], tab_name, min_col, max_col)
 
     # distribute drop down lists
     dv_list = {
@@ -206,8 +220,7 @@ def main():
     #   - and should the final concatenated file contain columns for the date and the source BTT file?
     #   - there also seems to be a problem with the new file when opening                                                               # DONE
     #   - column AL? - aktivesTeilprojekt??
-    #   - optimize performance!
-
+    #   - optimize performance!                                                                                                         # DONE
 
     # modify data validations
     wb["BTT"].data_validations = DataValidationList()
@@ -222,4 +235,7 @@ def main():
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    end_time = time.time()
+    print("execution time:", end_time - start_time)
