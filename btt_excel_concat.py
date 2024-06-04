@@ -13,6 +13,18 @@ from openpyxl.formatting.rule import Rule
 
 
 def get_max_row(sheet, start_col, end_col):
+    """
+    Parameters
+    ----------
+    :param sheet:
+        Worksheet to be searched
+    :param start_col:
+        starting column of the column-range
+    :param end_col:
+        end column of the column-range
+    :return:
+        the last non-empty row in given column-range
+    """
     max_row = 0
     for col in range(start_col, end_col + 1):
         for row in range(1, sheet.max_row + 1):
@@ -22,16 +34,59 @@ def get_max_row(sheet, start_col, end_col):
 
 
 def copy_range(start_col, start_row, end_col, end_row, sheet):
+    """
+    Parameters
+    ----------
+    :param start_col:
+        start column copy area
+    :param start_row:
+        start row of copy area
+    :param end_col:
+        end column of copy area
+    :param end_row:
+        end row of copy area
+    :param sheet:
+        Worksheet to be copied from
+    :return:
+        list of cell values in given range
+    """
     return [[sheet.cell(row=i, column=j).value for j in range(start_col, end_col + 1)] for i in range(start_row, end_row + 1)]
 
 
 def paste_range(start_col, start_row, sheet_receiving, copied_data):
+    """
+    Parameters
+    ----------
+    :param start_col:
+        start column copy area
+    :param start_row:
+        start row of copy area
+    :param sheet_receiving:
+        receiving Worksheet to write copied data to
+    :param copied_data:
+        list of cell values, procured by the copy_range()-function
+    :return:
+        None
+    """
     for i, row_data in enumerate(copied_data, start=start_row):
         for j, value in enumerate(row_data, start=start_col):
             sheet_receiving.cell(row=i, column=j).value = value
 
 
 def add_dv(sheet, dv_list):
+    """ Function to add data validation to a given Worksheet
+        The ranges and source values as well as the target column(s) are given by the dv_list parameter.
+        Every column for each formula is assigned a data validation.
+
+    Parameters
+    ----------
+    :param sheet:
+        Worksheet to which data validation should be added
+    :param dv_list:
+        list of data validations, consisting of a source table selection and one or more target columns
+    :return:
+        None
+    """
     max_row = sheet.max_row
     for formula, cols in dv_list.items():
         for col in cols:
@@ -50,6 +105,19 @@ def add_dv(sheet, dv_list):
 
 
 def add_cf(sheet, cf_list):
+    """ Function to add conditional formatting to a given Worksheet.
+        The ranges and formulas as well as the target column(s) are given by the cf_list parameter.
+        Every column for each formula is assigned a formatting rule with a red PatternFill.
+
+    Parameters
+    ----------
+    :param sheet:
+        Worksheet to which conditional formatting should be added
+    :param cf_list:
+        list of conditional formatting, consisting of a formula and one or more target columns
+    :return:
+        None
+    """
     red_fill = PatternFill(patternType=None,
                            fgColor=Color(rgb="000000",
                                          type="rgb"),
@@ -68,23 +136,42 @@ def add_cf(sheet, cf_list):
 
 
 def hash_row(row):
+    """
+    Parameters
+    ----------
+    :param row:
+        row to be hashed
+    :return:
+        hash value of the input row
+    """
     row_str = ''.join([str(cell) for cell in row])
     return xxhash.xxh64(row_str).hexdigest()
 
 
 def clean_table(sheet, table_name):
+    """ Function to clear a table in a given Worksheet.
+        Every empty row is being eliminated by shifting non-empty rows to the top.
+
+        The function also consumes the update_table_dimensions()-function to further apply the new dimensions to the table object after the shifting.
+
+    Parameters
+    ----------
+    :param sheet:
+        Worksheet, that contains the table object
+    :param table_name:
+        table name of the table to be cleaned up
+    :return:
+        None
+    """
     if table_name in sheet.tables:
         table = sheet.tables[table_name]
         min_col, min_row, max_col, max_row = range_boundaries(table.ref)
-
-        # Create a list to store non-empty rows
         non_empty_rows = []
 
         for row in range(min_row, max_row + 1):
             if not all(sheet.cell(row=row, column=col).value is None for col in range(min_col, max_col + 1)):
                 non_empty_rows.append(row)
 
-        # Move non-empty rows up to fill empty rows
         for i, row in enumerate(non_empty_rows, start=min_row):
             for col in range(min_col, max_col + 1):
                 sheet.cell(row=i, column=col).value = sheet.cell(row=row, column=col).value
@@ -95,6 +182,20 @@ def clean_table(sheet, table_name):
 
 
 def update_table_dimensions(sheet, table_name, start_col, end_col):
+    """ Function to update the table dimensions of a given table on a given Worksheet.
+        Consumed by the clean_table()-function
+
+    :param sheet:
+        Worksheet containing the table to be updated
+    :param table_name:
+        name of thr table to be updated
+    :param start_col:
+        start column of the table, appointed within the clean_table()-function by taking the range boundaries of the table
+    :param end_col:
+        end column of the table, appointed within the clean_table()-function by taking the range boundaries of the table
+    :return:
+        None
+    """
     if table_name in sheet.tables:
         table = sheet.tables[table_name]
         start_row = 1 if table_name != "BTT" else 2
@@ -102,6 +203,23 @@ def update_table_dimensions(sheet, table_name, start_col, end_col):
 
 
 def main():
+    """ Main-function.
+        Loads the template file and opens a file dialog to select BTT-Files to be consolidated.
+        Deletes the Worksheet "Quercheck Transaktionen".
+        For each file and each Worksheet within, a dictionary is built to store the dimensions of all subareas.
+
+        Then for each file in the dictionary, unique rows are hashed and mapped to the seen_hashes dictionary.
+        If unique, the values of that row get pasted to the template by consuming the paste_range()-function.
+
+        Afterward, the tables for each Worksheet in each file get cleaned up, data validation and conditional formatting will be reset and redistributed.
+        
+        At the end, the modified template is written to an output file.
+
+    Parameters
+    ----------
+    :return:
+        None
+    """
     root = tkinter.Tk()
     root.withdraw()
     wb = load_workbook('BTT_Template.xlsx')
@@ -184,10 +302,7 @@ def main():
 
             for tab_name in wb[sheet_name].tables:
                 clean_table(wb[sheet_name], tab_name)
-                min_col, min_row, max_col, max_row = range_boundaries(wb[sheet_name].tables[tab_name].ref)
-    #                update_table_dimensions(wb[sheet_name], tab_name, min_col, max_col)
 
-    # distribute drop down lists
     dv_list = {
         f'BPML!$A$2:$A${get_max_row(wb["BPML"], column_index_from_string("A"), column_index_from_string("A"))}': {'B'},
         f'=BPML!$F$2:$F${get_max_row(wb["BPML"], column_index_from_string("F"), column_index_from_string("F"))}': {'C'},
@@ -202,7 +317,6 @@ def main():
         f'=Übersicht!$F$2:$F${get_max_row(wb["Übersicht"], column_index_from_string("F"), column_index_from_string("F"))}': {'F'}
     }
 
-    # distribute conditional formatting
     cf_list = {
         f"ISBLANK(B3)": {'B'},
         f'AND(ISBLANK(W3),OR(T3="Mail",T3="XML",T3="weiterer"))': {'W'},
@@ -221,12 +335,10 @@ def main():
     #   - there also seems to be a problem with the new file when opening                                                               # DONE
     #   - column AL? - aktivesTeilprojekt??
     #   - optimize performance!                                                                                                         # DONE
+    #   - clean up          
 
-    # modify data validations
     wb["BTT"].data_validations = DataValidationList()
     add_dv(wb["BTT"], dv_list)
-
-    # modify conditional formatting
     wb.conditional_formatting = ConditionalFormattingList()
     add_cf(wb["BTT"], cf_list)
 
