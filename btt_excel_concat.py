@@ -1,3 +1,5 @@
+import openpyxl
+import pandas as pd
 import tkinter
 import time
 from tkinter import filedialog
@@ -6,7 +8,7 @@ import xxhash
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles.differential import DifferentialStyle
-from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
+from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries, dataframe
 from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
 from openpyxl.styles import PatternFill, Color
 from openpyxl.formatting.rule import Rule
@@ -35,6 +37,11 @@ def get_max_row(sheet, start_col, end_col):
 
 def copy_range(start_col, start_row, end_col, end_row, sheet):
     """
+    Notes
+    -----
+    :requirement 04.06.2024 BWB:
+         the funktion only copies the values if the flag in column "AT" is not set
+
     Parameters
     ----------
     :param start_col:
@@ -50,7 +57,7 @@ def copy_range(start_col, start_row, end_col, end_row, sheet):
     :return:
         list of cell values in given range
     """
-    return [[sheet.cell(row=i, column=j).value for j in range(start_col, end_col + 1)] for i in range(start_row, end_row + 1)]
+    return [[sheet.cell(row=i, column=j).value for j in range(start_col, end_col + 1)] for i in range(start_row, end_row + 1) if sheet.cell(row=i, column=column_index_from_string("AT")).value != "x"]
 
 
 def paste_range(start_col, start_row, sheet_receiving, copied_data):
@@ -202,8 +209,33 @@ def update_table_dimensions(sheet, table_name, start_col, end_col):
         table.ref = f"{get_column_letter(start_col)}{start_row}:{get_column_letter(end_col)}{get_max_row(sheet, start_col, end_col)}"
 
 
-def main():
-    """ Main-function.
+def copy_values(file, target_sheet):
+    """ Function for copying the values from column "A" to column "AS", if target column is empty.
+        To copy only the values, not the formulas a pandas.DataFrame is used.
+
+    Notes
+    -----
+    :requirement 04.06.2024 BWB:
+         The funktion is added to fulfill this requirement.
+
+    Parameters
+    ----------
+    :param file:
+        the source file to read the data from
+    :param target_sheet:
+        the sheet, where the data should be copied, usually the BTT-Sheet from the template file
+    :return:
+        None
+    """
+    df = pd.read_excel(file, sheet_name='BTT', usecols=[0], engine='openpyxl', skiprows=1)
+    for idx, value in enumerate(df.itertuples(), -1):
+        if not target_sheet.cell(row=idx + 3, column=column_index_from_string('AS')).value:
+            target_sheet.cell(row=idx + 3, column=column_index_from_string('AS')).value = str(value)
+
+
+def btt_concat():
+    """ Function for merging multipie BTT-Files.
+
         Loads the template file and opens a file dialog to select BTT-Files to be consolidated.
         Deletes the Worksheet "Quercheck Transaktionen".
         For each file and each Worksheet within, a dictionary is built to store the dimensions of all subareas.
@@ -223,10 +255,12 @@ def main():
     root = tkinter.Tk()
     root.withdraw()
     wb = load_workbook('BTT_Template.xlsx')
+    btt = wb["BTT"]
     file_paths = filedialog.askopenfilenames(filetypes=[("Excel files", "*.xlsx *.xls")])
     all_tab_data = {}
 
     for path in file_paths:
+        copy_values(path, btt)
         wb_tmp = load_workbook(path)
         try:
             wb_tmp.remove(wb_tmp["Quercheck Transaktionen"])
@@ -242,8 +276,7 @@ def main():
                 ]
             elif sheet_name == "BTT":
                 tab_data[sheet_name] = [
-                    {"start_col": 1, "start_row": 3, "end_col": wb_tmp[sheet_name].max_column,
-                     "end_row": wb_tmp[sheet_name].max_row}
+                    {"start_col": 1, "start_row": 3, "end_col": wb_tmp[sheet_name].max_column, "end_row": wb_tmp[sheet_name].max_row}
                 ]
             elif sheet_name == "BPML":
                 tab_data[sheet_name] = [
@@ -324,26 +357,17 @@ def main():
         f'ISBLANK(~3)': {'H', 'I', 'D', 'O', 'T', 'X', 'Z'}
     }
 
-    # TODO:
-    #   - the datavalidation objects must be modified and can neither be overwritten nor deleted, so these bad boys must get            # DONE
-    #     a new multicellrange - max value                                                                                              # DONE
-    #   - then the formula1 parameter must be checked and if this doesnt work, it needs to be replaced with the new values              # DONE
-    #   - further the Style of the cells must be expanded to the last row -> formatting rules?                                          # DONE
-    #   - then the program should work fine for one BTT file, if there are more files at once, what happens with duplicates?            # DONE
-    #   - also what should be done if there already is an existing consolidated file?   -> overwritten                                  # DONE
-    #   - and should the final concatenated file contain columns for the date and the source BTT file?
-    #   - there also seems to be a problem with the new file when opening                                                               # DONE
-    #   - column AL? - aktivesTeilprojekt??
-    #   - optimize performance!                                                                                                         # DONE
-    #   - clean up          
-
-    wb["BTT"].data_validations = DataValidationList()
-    add_dv(wb["BTT"], dv_list)
+    btt.data_validations = DataValidationList()
+    add_dv(btt, dv_list)
     wb.conditional_formatting = ConditionalFormattingList()
-    add_cf(wb["BTT"], cf_list)
+    add_cf(btt, cf_list)
 
     wb.save('output.xlsx')
     wb.close()
+
+
+def main():
+    btt_concat()
 
 
 if __name__ == "__main__":
