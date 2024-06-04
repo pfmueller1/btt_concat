@@ -212,7 +212,7 @@ def main():
         If unique, the values of that row get pasted to the template by consuming the paste_range()-function.
 
         Afterward, the tables for each Worksheet in each file get cleaned up, data validation and conditional formatting will be reset and redistributed.
-        
+
         At the end, the modified template is written to an output file.
 
     Parameters
