@@ -1,17 +1,21 @@
-import openpyxl
-import pandas as pd
-import tkinter
+import re
+import shutil
 import time
+import tkinter
+import warnings
+from datetime import datetime
 from tkinter import filedialog
 
+import pandas as pd
+import xlwings as xw
 import xxhash
 from openpyxl.formatting.formatting import ConditionalFormattingList
-from openpyxl.reader.excel import load_workbook
-from openpyxl.styles.differential import DifferentialStyle
-from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries, dataframe
-from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
-from openpyxl.styles import PatternFill, Color
 from openpyxl.formatting.rule import Rule
+from openpyxl.reader.excel import load_workbook
+from openpyxl.styles import PatternFill, Color
+from openpyxl.styles.differential import DifferentialStyle
+from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
+from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
 
 
 def get_max_row(sheet, start_col, end_col):
@@ -233,7 +237,7 @@ def copy_values(file, target_sheet):
             target_sheet.cell(row=idx + 3, column=column_index_from_string('AS')).value = str(value)
 
 
-def btt_concat():
+def btt_concat(split=None):
     """ Function for merging multipie BTT-Files.
 
         Loads the template file and opens a file dialog to select BTT-Files to be consolidated.
@@ -362,16 +366,57 @@ def btt_concat():
     wb.conditional_formatting = ConditionalFormattingList()
     add_cf(btt, cf_list)
 
-    wb.save('output.xlsx')
+    wb.save(file_name)
     wb.close()
+
+    warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
+    app = xw.App(visible=False)
+    wb = xw.Book(file_name)
+    wb.save()
+    wb.close()
+    app.quit()
+    time.sleep(5)
+
+    if split:
+        print(split)
+        tp_list = []
+
+        wb = load_workbook(file_name, data_only=True)
+        [tp_list.append(wb['Übersicht'].cell(row=idx, column=column_index_from_string('F')).value) for idx in range(wb['Übersicht'].min_row + 1, wb['Übersicht'].max_row + 1)]
+        wb.close()
+
+        file, ext = file_name.split('.', 1)
+
+        df = pd.read_excel(file_name, sheet_name='BTT', usecols=[4], engine='openpyxl', skiprows=1)
+
+        for tp in tp_list:
+            print(tp)
+            shutil.copy(file_name, re.sub(r'[<>:"/\\|?*]', '_', f"{file}_{tp}.{ext}"))
+            try:
+                wb = load_workbook(f"{file}_{tp}.{ext}")
+                ws = wb['BTT']
+                for idx, value in enumerate(df.itertuples(), -1):
+                    print(str(value))
+                    if str(value) != str(tp):
+                        ws.delete_rows(idx+4, 1)
+                wb.save(f"{file}_{tp}.{ext}")
+                wb.close()
+            except Exception as e:
+                print(str(e))
 
 
 def main():
-    btt_concat()
+    btt_concat(split=True)
 
 
 if __name__ == "__main__":
     start_time = time.time()
+    file_name = f"BTT_Master_konsolidiert_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+
     main()
     end_time = time.time()
     print("execution time:", end_time - start_time)
+
+    # TODO:
+    #   - bug meim konsolodieren nur einer Datei?
+    #   - Datenvalidierung für aktives Teilprojekt -> aktuell ignorierter Fehler
