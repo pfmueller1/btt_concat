@@ -318,24 +318,62 @@ def btt_concat(split=None):
         all_tab_data[path] = tab_data
 
     seen_hashes = {}
+    project_data = {}
     for file, data in all_tab_data.items():
         wb_tmp = load_workbook(file)
         for sheet_name, dim in data.items():
-            if isinstance(dim, list):
-                for d in dim:
-                    sel_range = copy_range(d["start_col"], d["start_row"], d["end_col"], d["end_row"], wb_tmp[sheet_name])
+            if sheet_name == "BTT":
+                df = pd.read_excel(file, sheet_name="BTT", engine='openpyxl', skiprows=2, usecols=[4])
+                df['RowHash'] = df.apply(lambda row: hash_row(row.values), axis=1)
+                if isinstance(dim, list):
+                    for d in dim:
+                        sel_range = copy_range(d["start_col"], d["start_row"], d["end_col"], d["end_row"], wb_tmp[sheet_name])
+                        for row_index in range(min(len(df), len(sel_range))):
+                            row = sel_range[row_index]
+                            row_hash = hash_row(row)
+                            if split:
+                                project_name = df.iloc[row_index, 0]
+                                if project_name not in project_data:
+                                    project_data[project_name] = {'seen_hashes': set(), 'data': []}
+                                if row_hash not in project_data[project_name]['seen_hashes']:
+                                    project_data[project_name]['seen_hashes'].add(row_hash)
+                                    project_data[project_name]['data'].append(row)
+                            else:
+                                if row_hash not in seen_hashes.get(sheet_name, set()):
+                                    seen_hashes.setdefault(sheet_name, set()).add(row_hash)
+                                    paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+                else:
+                    sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
+                    for row_index in range(min(len(df), len(sel_range))):
+                        row = sel_range[row_index]
+                        row_hash = hash_row(row)
+                        if split:
+                            project_name = df.iloc[row_index, 0]
+                            if project_name not in project_data:
+                                project_data[project_name] = {'seen_hashes': set(), 'data': []}
+                            if row_hash not in project_data[project_name]['seen_hashes']:
+                                project_data[project_name]['seen_hashes'].add(row_hash)
+                                project_data[project_name]['data'].append(row)
+                        else:
+                            if row_hash not in seen_hashes.get(sheet_name, set()):
+                                seen_hashes.setdefault(sheet_name, set()).add(row_hash)
+                                paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+            else:
+                if isinstance(dim, list):
+                    for d in dim:
+                        sel_range = copy_range(d["start_col"], d["start_row"], d["end_col"], d["end_row"], wb_tmp[sheet_name])
+                        for row in sel_range:
+                            row_hash = hash_row(row)
+                            if row_hash not in seen_hashes.get(sheet_name, set()):
+                                seen_hashes.setdefault(sheet_name, set()).add(row_hash)
+                                paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+                else:
+                    sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
                     for row in sel_range:
                         row_hash = hash_row(row)
                         if row_hash not in seen_hashes.get(sheet_name, set()):
                             seen_hashes.setdefault(sheet_name, set()).add(row_hash)
-                            paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
-            else:
-                sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
-                for row in sel_range:
-                    row_hash = hash_row(row)
-                    if row_hash not in seen_hashes.get(sheet_name, set()):
-                        seen_hashes.setdefault(sheet_name, set()).add(row_hash)
-                        paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+                            paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
 
             for tab_name in wb[sheet_name].tables:
                 clean_table(wb[sheet_name], tab_name)
@@ -369,44 +407,9 @@ def btt_concat(split=None):
     wb.save(file_name)
     wb.close()
 
-    warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
-    app = xw.App(visible=False)
-    wb = xw.Book(file_name)
-    wb.save()
-    wb.close()
-    app.quit()
-    time.sleep(5)
-
-    if split:
-        print(split)
-        tp_list = []
-
-        wb = load_workbook(file_name, data_only=True)
-        [tp_list.append(wb['Übersicht'].cell(row=idx, column=column_index_from_string('F')).value) for idx in range(wb['Übersicht'].min_row + 1, wb['Übersicht'].max_row + 1)]
-        wb.close()
-
-        file, ext = file_name.split('.', 1)
-
-        df = pd.read_excel(file_name, sheet_name='BTT', usecols=[4], engine='openpyxl', skiprows=1)
-
-        for tp in tp_list:
-            print(tp)
-            shutil.copy(file_name, re.sub(r'[<>:"/\\|?*]', '_', f"{file}_{tp}.{ext}"))
-            try:
-                wb = load_workbook(f"{file}_{tp}.{ext}")
-                ws = wb['BTT']
-                for idx, value in enumerate(df.itertuples(), -1):
-                    print(str(value))
-                    if str(value) != str(tp):
-                        ws.delete_rows(idx+4, 1)
-                wb.save(f"{file}_{tp}.{ext}")
-                wb.close()
-            except Exception as e:
-                print(str(e))
-
 
 def main():
-    btt_concat(split=True)
+    btt_concat(split=False)
 
 
 if __name__ == "__main__":
