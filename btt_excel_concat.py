@@ -110,7 +110,10 @@ def add_dv(sheet, dv_list):
                 showInputMessage=True,
                 showErrorMessage=True
             )
-            range_str = f"${col_letter}$3:${col_letter}${max_row}"
+            if sheet.title == "BTT":
+                range_str = f"${col_letter}$3:${col_letter}${max_row}"
+            elif sheet.title == "Übersicht":
+                range_str = f"A1"
             dv.add(range_str)
             sheet.add_data_validation(dv)
 
@@ -399,10 +402,12 @@ def btt_concat(split=None):
         f'ISBLANK(~3)': {'H', 'I', 'D', 'O', 'T', 'X', 'Z'}
     }
 
-    btt.data_validations = DataValidationList()
-    add_dv(btt, dv_list)
     wb.conditional_formatting = ConditionalFormattingList()
+    btt.data_validations = DataValidationList()
+    wb["Übersicht"].data_validations = DataValidationList()
     add_cf(btt, cf_list)
+    add_dv(btt, dv_list)
+    add_dv(wb["Übersicht"], {f'=Übersicht!$E$2:$E${get_max_row(wb["Übersicht"], column_index_from_string("E"), column_index_from_string("E"))}': {'A'}})
 
     wb.save(file_name)
     wb.close()
