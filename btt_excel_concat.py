@@ -1,13 +1,10 @@
 import re
-import shutil
 import time
 import tkinter
-import warnings
 from datetime import datetime
 from tkinter import filedialog
 
 import pandas as pd
-import xlwings as xw
 import xxhash
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.formatting.rule import Rule
@@ -98,6 +95,7 @@ def add_dv(sheet, dv_list):
     :return:
         None
     """
+    range_str = ""
     max_row = sheet.max_row
     for formula, cols in dv_list.items():
         for col in cols:
@@ -324,6 +322,10 @@ def btt_concat(split=None):
     project_data = {}
     for file, data in all_tab_data.items():
         wb_tmp = load_workbook(file)
+        active_tp = wb_tmp["Übersicht"]["A1"].value
+        # TODO:
+        #   - set variable active_tp (Übersicht, A1)
+        #   - refactor the A-Column by substituting the VLOOKUP statement -> re.sub(r'VLOOKUP\(.*?\)', active_tp, <the value in column a in BTT>) 
         for sheet_name, dim in data.items():
             if sheet_name == "BTT":
                 df = pd.read_excel(file, sheet_name="BTT", engine='openpyxl', skiprows=2, usecols=[4])
@@ -345,6 +347,10 @@ def btt_concat(split=None):
                                 if row_hash not in seen_hashes.get(sheet_name, set()):
                                     seen_hashes.setdefault(sheet_name, set()).add(row_hash)
                                     paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+                        for idx in range(d["start_row"], d["end_row"] + 1):
+                            cell = wb[sheet_name].cell(row=idx, column=column_index_from_string('A'))
+                            mod_value = re.sub(r'aktives_Teilprojekt', active_tp, str(cell.value))
+                            cell.value = mod_value
                 else:
                     sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
                     for row_index in range(min(len(df), len(sel_range))):
@@ -361,6 +367,10 @@ def btt_concat(split=None):
                             if row_hash not in seen_hashes.get(sheet_name, set()):
                                 seen_hashes.setdefault(sheet_name, set()).add(row_hash)
                                 paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+                    for idx in range(dim["start_row"], dim["end_row"] + 1):
+                        cell = wb[sheet_name].cell(row=idx, column=column_index_from_string('A'))
+                        mod_value = re.sub(r'aktives_Teilprojekt', active_tp, str(cell.value))
+                        cell.value = mod_value
             else:
                 if isinstance(dim, list):
                     for d in dim:
@@ -427,4 +437,3 @@ if __name__ == "__main__":
 
     # TODO:
     #   - bug meim konsolodieren nur einer Datei?
-    #   - Datenvalidierung für aktives Teilprojekt -> aktuell ignorierter Fehler
