@@ -3,6 +3,7 @@ import time
 import tkinter
 from datetime import datetime
 from tkinter import filedialog
+import xlwings as xw
 
 import pandas as pd
 import xxhash
@@ -214,30 +215,6 @@ def update_table_dimensions(sheet, table_name, start_col, end_col):
         table.ref = f"{get_column_letter(start_col)}{start_row}:{get_column_letter(end_col)}{get_max_row(sheet, start_col, end_col)}"
 
 
-def copy_values(file, target_sheet):
-    """ Function for copying the values from column "A" to column "AS", if target column is empty.
-        To copy only the values, not the formulas a pandas.DataFrame is used.
-
-    Notes
-    -----
-    :requirement 04.06.2024 BWB:
-         The funktion is added to fulfill this requirement.
-
-    Parameters
-    ----------
-    :param file:
-        the source file to read the data from
-    :param target_sheet:
-        the sheet, where the data should be copied, usually the BTT-Sheet from the template file
-    :return:
-        None
-    """
-    df = pd.read_excel(file, sheet_name='BTT', usecols=[0], engine='openpyxl', skiprows=1)
-    for idx, value in enumerate(df.itertuples(), -1):
-        if not target_sheet.cell(row=idx + 3, column=column_index_from_string('AS')).value:
-            target_sheet.cell(row=idx + 3, column=column_index_from_string('AS')).value = str(value)
-
-
 def btt_concat(split=None):
     """ Function for merging multipie BTT-Files.
 
@@ -265,7 +242,6 @@ def btt_concat(split=None):
     all_tab_data = {}
 
     for path in file_paths:
-        copy_values(path, btt)
         wb_tmp = load_workbook(path)
         try:
             wb_tmp.remove(wb_tmp["Quercheck Transaktionen"])
@@ -347,10 +323,6 @@ def btt_concat(split=None):
                                 if row_hash not in seen_hashes.get(sheet_name, set()):
                                     seen_hashes.setdefault(sheet_name, set()).add(row_hash)
                                     paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
-                        for idx in range(d["start_row"], d["end_row"] + 1):
-                            cell = wb[sheet_name].cell(row=idx, column=column_index_from_string('A'))
-                            mod_value = re.sub(r'aktives_Teilprojekt', active_tp, str(cell.value))
-                            cell.value = mod_value
                 else:
                     sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
                     for row_index in range(min(len(df), len(sel_range))):
@@ -367,10 +339,6 @@ def btt_concat(split=None):
                             if row_hash not in seen_hashes.get(sheet_name, set()):
                                 seen_hashes.setdefault(sheet_name, set()).add(row_hash)
                                 paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
-                    for idx in range(dim["start_row"], dim["end_row"] + 1):
-                        cell = wb[sheet_name].cell(row=idx, column=column_index_from_string('A'))
-                        mod_value = re.sub(r'aktives_Teilprojekt', active_tp, str(cell.value))
-                        cell.value = mod_value
             else:
                 if isinstance(dim, list):
                     for d in dim:
@@ -390,6 +358,9 @@ def btt_concat(split=None):
 
             for tab_name in wb[sheet_name].tables:
                 clean_table(wb[sheet_name], tab_name)
+        wb_tmp.close()
+        for idx in range(3, wb["BTT"].max_row + 1):
+            wb["BTT"].cell(row=idx, column=1).value = re.sub(r'aktives_Teilprojekt', f'"{active_tp}"', str(wb["BTT"].cell(row=idx, column=1).value))
 
     dv_list = {
         f'BPML!$A$2:$A${get_max_row(wb["BPML"], column_index_from_string("A"), column_index_from_string("A"))}': {'B'},
@@ -422,6 +393,32 @@ def btt_concat(split=None):
     wb.save(file_name)
     wb.close()
 
+    """ 
+    Notes
+    -----
+    :requirement 04.06.2024 BWB:
+         The functionality is added to copy the values from column 'A' to column 'AS' in the BTT-Sheet.
+         Not pretty, but unfortunately when writing formulas to a sheet, the values dont get calculated until the file is opened and saved.
+         Therefore after consolidating the selected files, the file is saved, then gets opened and saved again.
+         Then the values are calculated and can be copied to column 'AS'.
+         
+         There might be a nicer way to do this.
+    """
+    app = xw.App(visible=False)
+    _wb = xw.Book(file_name)
+    _wb.save()
+    _wb.close()
+    app.quit()
+
+    __wb = load_workbook(file_name, data_only=True, read_only=False)
+    btt_vo = __wb["BTT"]
+    for row in range(3, btt_vo.max_row + 1):
+        source_cell = btt_vo.cell(row=row, column=1)
+        target_cell = btt_vo.cell(row=row, column=column_index_from_string('AS'))
+        target_cell.value = source_cell.value
+    __wb.save(file_name)
+    __wb.close()
+
 
 def main():
     btt_concat(split=False)
@@ -437,3 +434,6 @@ if __name__ == "__main__":
 
     # TODO:
     #   - bug meim konsolodieren nur einer Datei?
+    #   - Fehler mit der falschen Belegung von aktuves_Teilprojekt gefixed
+    #   - es wird immernoch falsch in AS kopiert
+    #   - Fehler beim Lesen mit den DatenValidierugen beheben
