@@ -1,6 +1,7 @@
 import re
 import time
 import tkinter
+import warnings
 from datetime import datetime
 from tkinter import filedialog
 import xlwings as xw
@@ -410,14 +411,14 @@ def btt_concat(split=None):
     _wb.close()
     app.quit()
 
-    __wb = load_workbook(file_name, data_only=True, read_only=False)
+"""    __wb = load_workbook(file_name)
     btt_vo = __wb["BTT"]
     for row in range(3, btt_vo.max_row + 1):
         source_cell = btt_vo.cell(row=row, column=1)
         target_cell = btt_vo.cell(row=row, column=column_index_from_string('AS'))
         target_cell.value = source_cell.value
     __wb.save(file_name)
-    __wb.close()
+    __wb.close()"""
 
 
 def main():
@@ -425,6 +426,7 @@ def main():
 
 
 if __name__ == "__main__":
+    warnings.simplefilter("ignore", category=UserWarning)
     start_time = time.time()
     file_name = f"BTT_Master_konsolidiert_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
 
@@ -434,6 +436,4 @@ if __name__ == "__main__":
 
     # TODO:
     #   - bug meim konsolodieren nur einer Datei?
-    #   - Fehler mit der falschen Belegung von aktuves_Teilprojekt gefixed
-    #   - es wird immernoch falsch in AS kopiert
-    #   - Fehler beim Lesen mit den DatenValidierugen beheben
+    #   - doch noch ein Fehler beim kopieren der Daten
