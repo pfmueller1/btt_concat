@@ -310,7 +310,7 @@ def btt_concat(split=None):
     project_data = {}
     for file, data in all_tab_data.items():
         wb_tmp = load_workbook(file)
-        active_tp = wb_tmp["Übersicht"]["A1"].value
+        active_tp = tp_mapping.get(wb_tmp["Übersicht"]["A1"].value)
         for sheet_name, dim in data.items():
             if sheet_name == "BTT":
                 df = pd.read_excel(file, sheet_name="BTT", engine='openpyxl', skiprows=2, usecols=[4])
@@ -323,17 +323,17 @@ def btt_concat(split=None):
                             row_hash = hash_row(row)
                             if row_hash not in seen_hashes.get(sheet_name, set()):
                                 seen_hashes.setdefault(sheet_name, set()).add(row_hash)
-                            if split:
-                                project_name = df.iloc[row_index, 0]
-                                if project_name not in project_data:
-                                    project_data[project_name] = {'seen_hashes': set(), 'data': []}
-                                if row_hash not in project_data[project_name]['seen_hashes']:
-                                    project_data[project_name]['seen_hashes'].add(row_hash)
-                                    project_data[project_name]['data'].append(row)
-                                for tp, _wb in wb_list.items():
-                                    paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
-                                paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
-                            else:
+                                if split:
+                                    project_name = df.iloc[row_index, 0]
+                                    if project_name == active_tp:
+                                        if project_name not in project_data:
+                                            project_data[project_name] = {'seen_hashes': set(), 'data': []}
+                                        if row_hash not in project_data[project_name]['seen_hashes']:
+                                            project_data[project_name]['seen_hashes'].add(row_hash)
+                                            project_data[project_name]['data'].append(row)
+                                        for tp, _wb in wb_list.items():
+                                            if tp == project_name:
+                                                paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
                                 paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
                 else:
                     sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
@@ -342,19 +342,17 @@ def btt_concat(split=None):
                         row_hash = hash_row(row)
                         if row_hash not in seen_hashes.get(sheet_name, set()):
                             seen_hashes.setdefault(sheet_name, set()).add(row_hash)
-                        if split:
-                            project_name = df.iloc[row_index, 0]
-                            if project_name not in project_data:
-                                project_data[project_name] = {'seen_hashes': set(), 'data': []}
-                            if row_hash not in project_data[project_name]['seen_hashes']:
-                                project_data[project_name]['seen_hashes'].add(row_hash)
-                                project_data[project_name]['data'].append(row)
-                            for tp, _wb in wb_list.items():
-                                paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
-                            paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
-                        else:
-                            for tp, _wb in wb_list.items():
-                                paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
+                            if split:
+                                project_name = df.iloc[row_index, 0]
+                                if project_name == active_tp:
+                                    if project_name not in project_data:
+                                        project_data[project_name] = {'seen_hashes': set(), 'data': []}
+                                    if row_hash not in project_data[project_name]['seen_hashes']:
+                                        project_data[project_name]['seen_hashes'].add(row_hash)
+                                        project_data[project_name]['data'].append(row)
+                                    for tp, _wb in wb_list.items():
+                                        if tp == project_name:
+                                            paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
                             paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
             else:
                 if isinstance(dim, list):
@@ -384,6 +382,7 @@ def btt_concat(split=None):
             for tp, _wb in wb_list.items():
                 for tab_name in _wb[sheet_name].tables:
                     clean_table(_wb[sheet_name], tab_name)
+
         wb_tmp.close()
 
         for idx in range(3, wb["BTT"].max_row + 1):
@@ -440,6 +439,21 @@ def main():
 
 if __name__ == "__main__":
     warnings.simplefilter("ignore", category=UserWarning)
+    tp_mapping = {
+        "Finanzen": "FI",
+        "Instandhaltung": "IH",
+        "Beschaffung": "BLQ",
+        "Hauptleistung": "HL",
+        "Nebenleistungen": "NL",
+        "Reporting": "Reporting",
+        "Berechtigung": "Berechtigung",
+        "Archivierung": "Archivierung",
+        "Stammdaten": "Stammdaten",
+        "Master": "Master",
+        "SAP Basis": "SAP Basis",
+        "PS/IM": "PS/IM"
+    }
+
     start_time = time.time()
     file_name = f"BTT_Master_konsolidiert_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
 
@@ -449,5 +463,4 @@ if __name__ == "__main__":
 
 #   TODO:
 #       - Zirkelbezug beim kopieren -> Ersatz?
-#       - Dateinamen anpassen
 #       - Datenvalidierung, ConditionalFormatting
