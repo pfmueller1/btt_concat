@@ -242,6 +242,9 @@ def btt_concat(split=None):
     file_paths = filedialog.askopenfilenames(filetypes=[("Excel files", "*.xlsx *.xls")])
     all_tab_data = {}
 
+    tp_list = set()
+    wb_list = {}
+
     for path in file_paths:
         wb_tmp = load_workbook(path)
         try:
@@ -260,6 +263,10 @@ def btt_concat(split=None):
                 tab_data[sheet_name] = [
                     {"start_col": 1, "start_row": 3, "end_col": wb_tmp[sheet_name].max_column, "end_row": wb_tmp[sheet_name].max_row}
                 ]
+                if split:
+                    df = pd.read_excel(path, sheet_name="BTT", engine='openpyxl', skiprows=2, usecols=[4])
+                    for value in df.iloc[:, 0]:
+                        tp_list.add(value)
             elif sheet_name == "BPML":
                 tab_data[sheet_name] = [
                     {"start_col": 1, "start_row": 2, "end_col": 4, "end_row": get_max_row(wb_tmp[sheet_name], 1, 4)},  # [A:D]
@@ -295,14 +302,15 @@ def btt_concat(split=None):
                 }
         all_tab_data[path] = tab_data
 
+    if split:
+        for tp in tp_list:
+            wb_list[tp] = load_workbook('BTT_Template.xlsx')
+
     seen_hashes = {}
     project_data = {}
     for file, data in all_tab_data.items():
         wb_tmp = load_workbook(file)
         active_tp = wb_tmp["Übersicht"]["A1"].value
-        # TODO:
-        #   - set variable active_tp (Übersicht, A1)
-        #   - refactor the A-Column by substituting the VLOOKUP statement -> re.sub(r'VLOOKUP\(.*?\)', active_tp, <the value in column a in BTT>) 
         for sheet_name, dim in data.items():
             if sheet_name == "BTT":
                 df = pd.read_excel(file, sheet_name="BTT", engine='openpyxl', skiprows=2, usecols=[4])
@@ -313,6 +321,8 @@ def btt_concat(split=None):
                         for row_index in range(min(len(df), len(sel_range))):
                             row = sel_range[row_index]
                             row_hash = hash_row(row)
+                            if row_hash not in seen_hashes.get(sheet_name, set()):
+                                seen_hashes.setdefault(sheet_name, set()).add(row_hash)
                             if split:
                                 project_name = df.iloc[row_index, 0]
                                 if project_name not in project_data:
@@ -320,15 +330,18 @@ def btt_concat(split=None):
                                 if row_hash not in project_data[project_name]['seen_hashes']:
                                     project_data[project_name]['seen_hashes'].add(row_hash)
                                     project_data[project_name]['data'].append(row)
+                                for tp, _wb in wb_list.items():
+                                    paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
+                                paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
                             else:
-                                if row_hash not in seen_hashes.get(sheet_name, set()):
-                                    seen_hashes.setdefault(sheet_name, set()).add(row_hash)
-                                    paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+                                paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
                 else:
                     sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
                     for row_index in range(min(len(df), len(sel_range))):
                         row = sel_range[row_index]
                         row_hash = hash_row(row)
+                        if row_hash not in seen_hashes.get(sheet_name, set()):
+                            seen_hashes.setdefault(sheet_name, set()).add(row_hash)
                         if split:
                             project_name = df.iloc[row_index, 0]
                             if project_name not in project_data:
@@ -336,10 +349,13 @@ def btt_concat(split=None):
                             if row_hash not in project_data[project_name]['seen_hashes']:
                                 project_data[project_name]['seen_hashes'].add(row_hash)
                                 project_data[project_name]['data'].append(row)
+                            for tp, _wb in wb_list.items():
+                                paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
+                            paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
                         else:
-                            if row_hash not in seen_hashes.get(sheet_name, set()):
-                                seen_hashes.setdefault(sheet_name, set()).add(row_hash)
-                                paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
+                            for tp, _wb in wb_list.items():
+                                paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
+                            paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
             else:
                 if isinstance(dim, list):
                     for d in dim:
@@ -348,6 +364,9 @@ def btt_concat(split=None):
                             row_hash = hash_row(row)
                             if row_hash not in seen_hashes.get(sheet_name, set()):
                                 seen_hashes.setdefault(sheet_name, set()).add(row_hash)
+                                if split:
+                                    for tp, _wb in wb_list.items():
+                                        paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
                                 paste_range(d["start_col"], d["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
                 else:
                     sel_range = copy_range(dim["start_col"], dim["start_row"], dim["end_col"], dim["end_row"], wb_tmp[sheet_name])
@@ -355,11 +374,18 @@ def btt_concat(split=None):
                         row_hash = hash_row(row)
                         if row_hash not in seen_hashes.get(sheet_name, set()):
                             seen_hashes.setdefault(sheet_name, set()).add(row_hash)
+                            if split:
+                                for tp, _wb in wb_list.items():
+                                    paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, _wb[sheet_name], [row])
                             paste_range(dim["start_col"], dim["start_row"] + len(seen_hashes[sheet_name]) - 1, wb[sheet_name], [row])
 
             for tab_name in wb[sheet_name].tables:
                 clean_table(wb[sheet_name], tab_name)
+            for tp, _wb in wb_list.items():
+                for tab_name in _wb[sheet_name].tables:
+                    clean_table(_wb[sheet_name], tab_name)
         wb_tmp.close()
+
         for idx in range(3, wb["BTT"].max_row + 1):
             wb["BTT"].cell(row=idx, column=1).value = re.sub(r'aktives_Teilprojekt', f'"{active_tp}"', str(wb["BTT"].cell(row=idx, column=1).value))
 
@@ -391,38 +417,25 @@ def btt_concat(split=None):
     add_dv(btt, dv_list)
     add_dv(wb["Übersicht"], {f'=Übersicht!$E$2:$E${get_max_row(wb["Übersicht"], column_index_from_string("E"), column_index_from_string("E"))}': {'A'}})
 
+    if split:
+        for tp, _wb in wb_list.items():
+            _wb.conditional_formatting = ConditionalFormattingList()
+            _wb["BTT"].data_validations = DataValidationList()
+            _wb["Übersicht"].data_validations = DataValidationList()
+            add_cf(_wb["BTT"], cf_list)
+            add_dv(_wb["BTT"], dv_list)
+            add_dv(_wb["Übersicht"], {f'=Übersicht!$E$2:$E${get_max_row(wb["Übersicht"], column_index_from_string("E"), column_index_from_string("E"))}': {'A'}})
+
+            mod_tp = re.sub(r'[<>:"/\\|?*]', '_', tp)
+            _wb.save(f"BTT_Master_konsolidiert_{mod_tp}_{datetime.now().strftime('%Y-%m-%d')}.xlsx")
+            _wb.close()
+
     wb.save(file_name)
     wb.close()
 
-    """ 
-    Notes
-    -----
-    :requirement 04.06.2024 BWB:
-         The functionality is added to copy the values from column 'A' to column 'AS' in the BTT-Sheet.
-         Not pretty, but unfortunately when writing formulas to a sheet, the values dont get calculated until the file is opened and saved.
-         Therefore after consolidating the selected files, the file is saved, then gets opened and saved again.
-         Then the values are calculated and can be copied to column 'AS'.
-         
-         There might be a nicer way to do this.
-    """
-    app = xw.App(visible=False)
-    _wb = xw.Book(file_name)
-    _wb.save()
-    _wb.close()
-    app.quit()
-
-"""    __wb = load_workbook(file_name)
-    btt_vo = __wb["BTT"]
-    for row in range(3, btt_vo.max_row + 1):
-        source_cell = btt_vo.cell(row=row, column=1)
-        target_cell = btt_vo.cell(row=row, column=column_index_from_string('AS'))
-        target_cell.value = source_cell.value
-    __wb.save(file_name)
-    __wb.close()"""
-
 
 def main():
-    btt_concat(split=False)
+    btt_concat(split=True)
 
 
 if __name__ == "__main__":
@@ -434,6 +447,7 @@ if __name__ == "__main__":
     end_time = time.time()
     print("execution time:", end_time - start_time)
 
-    # TODO:
-    #   - bug meim konsolodieren nur einer Datei?
-    #   - doch noch ein Fehler beim kopieren der Daten
+#   TODO:
+#       - Zirkelbezug beim kopieren -> Ersatz?
+#       - Dateinamen anpassen
+#       - Datenvalidierung, ConditionalFormatting
