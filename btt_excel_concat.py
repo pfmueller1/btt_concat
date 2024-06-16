@@ -313,18 +313,31 @@ def btt_concat(split=None):
 				
 				# TODO
 				#	- works, but now more cases need to be handled
-				#		- if there are values in column AS, they should be prioritised and put in column A instead
-				#		- also this behaviour should only occur when the file is NOT split
+				#		- if there are values in column AS, they should be prioritised and put in column A instead							#DONE
+				#		- also this behaviour should only occur when the file is NOT split													#DONE
 				#		- if split, then instead of existing values, the formula should be kept in column A
 				#		
 				#		- for column E there is also a special case:
-				#			- if there is a value in column F, this value should be pasted in colum E of that row ('manual change')
-				df_a = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl", skiprows=2, usecols=[0])
-				df_e = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl", skiprows=2, usecols=[4])
+				#			- if there is a value in column F, this value should be pasted in colum E of that row ('manual change')			#DONE
+				if not split:
+					df_a = pd.read_excel(file, sheet_name=sheet_name, engine="openpyxl", skiprows=1, usecols=[0])
+					df_as = pd.read_excel(file, sheet_name=sheet_name, engine="openpyxl", skiprows=1, usecols=[44])
 
-				for idx in range(len(df_a)):
-					wb_tmp[sheet_name].cell(row=idx+3, column=1).value = df_a.iloc[idx, 0]	
-					wb_tmp[sheet_name].cell(row=idx+3, column=5).value = df_e.iloc[idx, 0]	
+					df_e = pd.read_excel(file, sheet_name=sheet_name, engine="openpyxl", skiprows=1, usecols=[4])
+					df_f = pd.read_excel(file, sheet_name=sheet_name, engine="openpyxl", skiprows=1, usecols=[5])
+
+					for idx in range(len(df_a)):
+						if pd.isnull(df_as.iloc[idx, 0]):
+							wb_tmp[sheet_name].cell(row=idx+3, column=1).value = df_a.iloc[idx, 0] 
+							# TODO -> works, should always be applied tho
+							wb_tmp[sheet_name].cell(row=idx+3, column=45).value = df_a.iloc[idx, 0]
+						else:
+							wb_tmp[sheet_name].cell(row=idx+3, column=1).value = df_as.iloc[idx, 0]
+
+						if pd.isnull(df_f.iloc[idx, 0]):
+							wb_tmp[sheet_name].cell(row=idx+3, column=5).value = df_e.iloc[idx, 0]	
+						else:
+							wb_tmp[sheet_name].cell(row=idx+3, column=5).value = df_f.iloc[idx, 0]	
 
 				if isinstance(dim, list):
 					for d in dim:
